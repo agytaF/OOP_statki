@@ -1,0 +1,353 @@
+using System;
+using System.Collections.Generic;
+
+namespace BattleshipGame
+{
+    class Program
+    {
+        static void Main(string[] args)
+        {
+            Game game = new Game();
+            game.startGame();
+        }
+    }
+
+    class Game
+    {
+        private Player playerOne;
+        private Player playerTwo;
+        private Player currentPlayer;
+        private Player enemyPlayer;
+        private int playerOneVictories;
+        private int playerTwoVictories;
+
+        public Game()
+        {
+            playerOne = new Player("Gracz 1");
+            playerTwo = new Player("Gracz 2");
+            currentPlayer = playerOne;
+            enemyPlayer = playerTwo;
+            playerOneVictories = 0;
+            playerTwoVictories = 0;
+        }
+
+        public void startGame()
+        {
+            Console.WriteLine("Witaj w grze w statki!");
+
+            do
+            {
+                Console.Clear();
+                Console.WriteLine($"Wynik: Gracz 1 - {playerOneVictories} : Gracz 2 - {playerTwoVictories}");
+                Console.WriteLine("Naciśnij Enter aby kontynuować...");
+                Console.ReadLine();
+
+                Console.Clear();
+
+                Console.WriteLine("Gracz 1 umieść swoje statki:");
+                playerOne.PositionShips();
+                Console.Clear();
+
+                Console.WriteLine("Gracz 2 umieść swoje statki:");
+                playerTwo.PositionShips();
+                Console.Clear();
+
+                while (!isGameFinished())
+                {
+                    Console.WriteLine($"{currentPlayer.Name}, twoja kolej:");
+                    Console.WriteLine("Twoja plansza:");
+                    currentPlayer.Board.showBoard();
+
+                    Console.WriteLine("Plansza przeciwnika:");
+                    currentPlayer.EnemyBoard.showBoard();
+
+                    string target;
+                    do
+                    {
+                        Console.Write("Podaj cel (np. A1): ");
+                        target = Console.ReadLine().ToUpper();
+                    } while (!checkIfFieldCorrect(target) || !checkIfMovePossible(target));
+
+                    Console.Clear();
+
+                    bool hit = enemyPlayer.tryToHit(target);
+                    if (hit)
+                    {
+                        Console.WriteLine("Trafiłeś!");
+                        if (!enemyPlayer.AreFurtherShotsPossible(target))
+                        {
+                            Console.WriteLine("Zestrzeliłeś cały statek!");
+                            enemyPlayer.MarkNearbyFieldsAsMiss(target);
+                        }
+                    }
+                    else
+                    {
+                        Console.WriteLine("Pudło!");
+                    }
+
+                    if (!hit || !enemyPlayer.AreFurtherShotsPossible(target))
+                    {
+                        Player temp = currentPlayer;
+                        currentPlayer = enemyPlayer;
+                        enemyPlayer = temp;
+                    }
+                }
+
+                Console.WriteLine($"Koniec gry! Wygrał {currentPlayer.Name}!");
+
+                if (currentPlayer == playerOne)
+                    playerOneVictories++;
+                else
+                    playerTwoVictories++;
+
+                Console.WriteLine("Czy chcesz zagrać jeszcze raz? (T/N)");
+            } while (Console.ReadLine().ToUpper() == "T");
+        }
+
+        private bool isGameFinished()
+        {
+            return playerOne.DidWin() || playerTwo.DidWin();
+        }
+
+        private bool checkIfFieldCorrect(string cel)
+        {
+            if (cel.Length != 2)
+                return false;
+
+            char column = cel[0];
+            int row;
+            if (!int.TryParse(cel[1].ToString(), out row))
+                return false;
+
+            row--;
+
+            if (column < 'A' || column > 'J' || row < 0 || row > 9)
+                return false;
+
+            return true;
+        }
+
+        private bool checkIfMovePossible(string cel)
+        {
+            int x = cel[0] - 'A';
+            int y = int.Parse(cel.Substring(1)) - 1;
+
+            return currentPlayer.EnemyBoard.Positions[y, x] == '.' || currentPlayer.EnemyBoard.Positions[y, x] == 'O';
+        }
+    }
+
+    class Player
+    {
+        public string Name { get; }
+        public Board Board { get; }
+        public Board EnemyBoard { get; }
+        public List<Ship> Ships { get; }
+
+        public Player(string name)
+        {
+            Name = name;
+            Board = new Board();
+            EnemyBoard = new Board();
+            Ships = new List<Ship>();
+        }
+
+        public void PositionShips()
+        {
+            foreach (var ship in Fleet.AllShips())
+            {
+                Board board = null;
+                do
+                {
+                    board = Board;
+                    board.showBoard();
+                    Console.WriteLine($"Umieść statek o długości {ship.Size}");
+                    Console.WriteLine($"Podaj początkowe pole (np. A1): ");
+                    string position = Console.ReadLine().ToUpper();
+                    Console.WriteLine($"Podaj kierunek (pionowy - P, poziomy - L): ");
+                    string direction = Console.ReadLine().ToUpper();
+
+                    board.PositionShip(ship, position, direction);
+                } while (board != Board);
+                Ships.Add(ship);
+            }
+        }
+
+        public void DisplayBoard()
+        {
+            Console.WriteLine("   A B C D E F G H I J");
+            for (int i = 0; i < 10; i++)
+            {
+                Console.Write(i + 1 + " ");
+                for (int j = 0; j < 10; j++)
+                {
+                    Console.Write(Board.Positions[i, j] + " ");
+                }
+                Console.WriteLine();
+            }
+        }
+
+        public bool tryToHit(string cel)
+        {
+            int x = cel[0] - 'A';
+            int y = int.Parse(cel.Substring(1)) - 1;
+
+            if (EnemyBoard.Positions[y, x] == ' ')
+                return false;
+
+            EnemyBoard.Positions[y, x] = Board.Positions[y, x] = Board.Positions[y, x] == ' ' ? 'X' : 'O';
+            return Board.Positions[y, x] == 'X';
+        }
+
+        public bool AreFurtherShotsPossible(string cel)
+        {
+            int x = cel[0] - 'A';
+            int y = int.Parse(cel.Substring(1)) - 1;
+
+            return Board.Positions[y, x] == 'O';
+        }
+
+        public void MarkNearbyFieldsAsMiss(string cel)
+        {
+            int x = cel[0] - 'A';
+            int y = int.Parse(cel.Substring(1)) - 1;
+
+            for (int i = Math.Max(0, y - 1); i <= Math.Min(9, y + 1); i++)
+            {
+                for (int j = Math.Max(0, x - 1); j <= Math.Min(9, x + 1); j++)
+                {
+                    if (EnemyBoard.Positions[i, j] == ' ')
+                        EnemyBoard.Positions[i, j] = '.';
+                }
+            }
+        }
+
+        public bool DidWin()
+        {
+            foreach (var ship in Ships)
+            {
+                if (!ship.Sunk)
+                    return false;
+            }
+            return true;
+        }
+    }
+
+    class Board
+    {
+        public char[,] Positions { get; }
+
+        public Board()
+        {
+            Positions = new char[10, 10];
+            for (int i = 0; i < 10; i++)
+            {
+                for (int j = 0; j < 10; j++)
+                {
+                    Positions[i, j] = '.';
+                }
+            }
+        }
+
+        public void showBoard()
+        {
+            Console.WriteLine("   A B C D E F G H I J");
+            for (int i = 0; i < 10; i++)
+            {
+                Console.Write(i + 1 + " ");
+                for (int j = 0; j < 10; j++)
+                {
+                    Console.Write(Positions[i, j] + " ");
+                }
+                Console.WriteLine();
+            }
+        }
+
+        public void PositionShip(Ship ship, string pole, string direction)
+        {
+            int x = pole[0] - 'A';
+            int y = int.Parse(pole.Substring(1)) - 1;
+
+            if (direction == "P")
+            {
+                if (y + ship.Size > 10)
+                {
+                    Console.WriteLine("Statek wychodzi poza planszę, wybierz inne pole.");
+                    return;
+                }
+
+                for (int i = y; i < y + ship.Size; i++)
+                {
+                    if (Positions[i, x] != '.')
+                    {
+                        Console.WriteLine("Nie można postawić statku na tym polu, wybierz inne pole.");
+                        return;
+                    }
+                }
+
+                for (int i = y; i < y + ship.Size; i++)
+                {
+                    Positions[i, x] = ' ';
+                }
+            }
+            else if (direction == "L")
+            {
+                if (x + ship.Size > 10)
+                {
+                    Console.WriteLine("Statek wychodzi poza planszę, wybierz inne pole.");
+                    return;
+                }
+
+                for (int i = x; i < x + ship.Size; i++)
+                {
+                    if (Positions[y, i] != '.')
+                    {
+                        Console.WriteLine("Nie można postawić statku na tym polu, wybierz inne pole.");
+                        return;
+                    }
+                }
+
+                for (int i = x; i < x + ship.Size; i++)
+                {
+                    Positions[y, i] = ' ';
+                }
+            }
+            else
+            {
+                Console.WriteLine("Niepoprawny kierunek, wybierz 'P' lub 'L'.");
+            }
+        }
+    }
+
+    class Ship
+    {
+        public int Size { get; }
+        public bool Sunk { get; set; }
+
+        public Ship(int size)
+        {
+            Size = size;
+        }
+    }
+
+    static class Fleet
+    {
+        public static List<Ship> AllShips()
+        {
+            List<Ship> Ships = new List<Ship>();
+            for (int i = 0; i < 4; i++)
+            {
+                Ships.Add(new Ship(1));
+            }
+            for (int i = 0; i < 3; i++)
+            {
+                Ships.Add(new Ship(2));
+            }
+            for (int i = 0; i < 2; i++)
+            {
+                Ships.Add(new Ship(3));
+            }
+            Ships.Add(new Ship(4));
+            return Ships;
+        }
+    }
+}
